@@ -7,6 +7,7 @@
 #include "function.h"
 #include "interp.h"
 #include <unordered_set>
+#include <iostream>
 
 Interpreter::Interpreter(Node *ast_to_adopt)
   : m_ast(ast_to_adopt) {
@@ -101,6 +102,49 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
       return Value(execute_node(env, node->get_kid(0)).get_ival() == execute_node(env, node->get_kid(1)).get_ival());
     case AST_NOT_EQUAL:
       return Value(execute_node(env, node->get_kid(0)).get_ival() != execute_node(env, node->get_kid(1)).get_ival());
+    // control
+    case AST_IF: {
+      Value if_cond = execute_node(env,node->get_kid(0));
+      if (if_cond.get_ival() != 0) {
+        execute_node(env, node->get_kid(1));
+      } else if (node->get_num_kids() == 3) { // there's an else
+        execute_node(env, node->get_kid(2)->get_kid(0));
+      }
+      return Value(0);
+    }
+    case AST_WHILE: {
+      Value while_cond = execute_node(env,node->get_kid(0));
+      while (while_cond.get_ival() != 0) {
+        execute_node(env, node->get_kid(1));
+        while_cond = execute_node(env,node->get_kid(0));
+      }
+      return Value(0);
+    }
+    case AST_STMTS: {
+      Environment* new_env = new Environment(&env);
+      Value res;
+      for (auto it = node->cbegin(); it != node->cend(); ++it) {
+        Node* child_node = *it;
+        res = execute_node(*new_env, child_node);
+        
+      }
+      delete new_env;
+      return res;
+    }
+    case AST_FUNC:
+      return Value(0);
+    case AST_FUNC_CALL: {
+      std::string func_name = node->get_kid(0)->get_str();
+      if (node->get_num_kids() > 1) { // func has args
+      int arg_ct = node->get_kid(1)->get_num_kids();
+        Value args[arg_ct];
+        for (int i = 0; i < arg_ct; i++) {
+          args[i] = execute_node(env, node->get_kid(1)->get_kid(i));
+        }
+        const Location &location = node->get_loc();
+        return env.function_call(func_name, args, arg_ct, location, *this);
+      }
+    }
     default:
       EvaluationError::raise(node->get_loc(),"Unrecognized node type");
   }
