@@ -79,16 +79,26 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
   int node_tag = node->get_tag();
   switch (node_tag) {
     // arithmetic operators
-    case AST_ADD:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() + execute_node(env, node->get_kid(1)).get_ival());
-    case AST_SUB:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() - execute_node(env, node->get_kid(1)).get_ival());
-    case AST_MULTIPLY:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() * execute_node(env, node->get_kid(1)).get_ival());
+    case AST_ADD: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() + r.get_ival());
+    }
+    case AST_SUB: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() - r.get_ival());
+    }
+    case AST_MULTIPLY: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() * r.get_ival());
+    }
     case AST_DIVIDE: {
-      int denominator = execute_node(env, node->get_kid(1)).get_ival();
-      if (denominator == 0) EvaluationError::raise(node->get_loc(),"Division by zero");
-      return Value(execute_node(env, node->get_kid(0)).get_ival()/denominator);
+      Value numerator = execute_node(env, node->get_kid(0)), denominator = execute_node(env, node->get_kid(1));
+      if (!numerator.is_numeric() || !denominator.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      if (denominator.get_ival() == 0) EvaluationError::raise(node->get_loc(),"Division by zero");
+      return Value(numerator.get_ival()/denominator.get_ival());
     }
     case AST_VARREF:
       return env.get_var(node->get_str());
@@ -108,26 +118,57 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
     // logical operators
     case AST_EQUAL:
       return env.set_var(node->get_kid(0)->get_str(), execute_node(env, node->get_kid(1)).get_ival());
-    case AST_OR:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() || execute_node(env, node->get_kid(1)).get_ival());
-    case AST_AND:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() && execute_node(env, node->get_kid(1)).get_ival());
+    case AST_OR: {
+      Value l = execute_node(env, node->get_kid(0));
+      if (!l.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      if (l.get_ival()) return Value(1);
+      Value r = execute_node(env, node->get_kid(1));
+      if (!r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() || r.get_ival());
+    }
+    case AST_AND: {
+      Value l = execute_node(env, node->get_kid(0));
+      if (!l.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      if (!l.get_ival()) return Value(0);
+      Value r = execute_node(env, node->get_kid(1));
+      if (!r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() && r.get_ival());
+    }
     // relational operators
-    case AST_LESSER:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() < execute_node(env, node->get_kid(1)).get_ival());
-    case AST_LESSER_EQUAL:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() <= execute_node(env, node->get_kid(1)).get_ival());
-    case AST_GREATER:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() > execute_node(env, node->get_kid(1)).get_ival());
-    case AST_GREATER_EQUAL:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() >= execute_node(env, node->get_kid(1)).get_ival());
-    case AST_EQUAL_EQUAL:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() == execute_node(env, node->get_kid(1)).get_ival());
-    case AST_NOT_EQUAL:
-      return Value(execute_node(env, node->get_kid(0)).get_ival() != execute_node(env, node->get_kid(1)).get_ival());
+    case AST_LESSER: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() < r.get_ival());
+    }
+    case AST_LESSER_EQUAL: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() <= r.get_ival());
+    }
+    case AST_GREATER: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() > r.get_ival());
+    }
+    case AST_GREATER_EQUAL: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() >= r.get_ival());
+    }
+    case AST_EQUAL_EQUAL: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() == r.get_ival());
+    }
+    case AST_NOT_EQUAL: {
+      Value l = execute_node(env, node->get_kid(0)), r = execute_node(env, node->get_kid(1));
+      if (!l.is_numeric() || !r.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
+      return Value(l.get_ival() != r.get_ival());
+    }
     // control
     case AST_IF: {
       Value if_cond = execute_node(env,node->get_kid(0));
+      if (!if_cond.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
       if (if_cond.get_ival() != 0) {
         execute_node(env, node->get_kid(1));
       } else if (node->get_num_kids() == 3) { // there's an else
@@ -137,9 +178,11 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
     }
     case AST_WHILE: {
       Value while_cond = execute_node(env,node->get_kid(0));
+      if (!while_cond.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
       while (while_cond.get_ival() != 0) {
         execute_node(env, node->get_kid(1));
-        while_cond = execute_node(env,node->get_kid(0));
+        while_cond = execute_node(env, node->get_kid(0));
+        if (!while_cond.is_numeric()) EvaluationError::raise(node->get_loc(), "Use of non-numeric value");
       }
       return Value(0);
     }
