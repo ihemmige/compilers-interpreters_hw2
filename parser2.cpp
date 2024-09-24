@@ -43,7 +43,6 @@
 // R    → E == E
 // R    → E != E
 // R    → E
-
 // TStmt →      Stmt
 // TStmt →      Func
 // Unit → TStmt
@@ -76,6 +75,7 @@ Parser2::~Parser2() {
 Node *Parser2::parse() {
   return parse_Unit();
 }
+
 Node *Parser2::parse_Unit() {
   // note that this function produces a "flattened" representation
   // of the unit
@@ -142,18 +142,17 @@ Node *Parser2::parse_Stmt() {
     expect_and_discard(TOK_LBRACE);
     if_->append_kid(parse_SList());
     expect_and_discard(TOK_RBRACE);
-
+    s->append_kid(if_);
     Node *possible_else = m_lexer->peek();
     if (possible_else && possible_else->get_tag() == TOK_ELSE) {
       Node *else_(expect(TOK_ELSE));
       if_->append_kid(else_);
-      else_->set_str("");
       else_->set_tag(AST_ELSE);
+      else_->set_str("");
       expect_and_discard(TOK_LBRACE);
       else_->append_kid(parse_SList());
       expect_and_discard(TOK_RBRACE);
-    }
-    s->append_kid(if_);
+    }    
   } else { // A
     s->append_kid(parse_A());
     expect_and_discard(TOK_SEMICOLON);
@@ -187,19 +186,20 @@ Node *Parser2::parse_SList() {
   // SList →      Stmt                             -- stmt list
   // SList →      Stmt SList
 
+  // Stmt
   std::unique_ptr<Node> statement_list(new Node(AST_STMTS));
   Node *next = m_lexer->peek();
   if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input looking for statement");
   statement_list->append_kid(parse_Stmt());
 
+  // SList
   next = m_lexer->peek();
   if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input after statement");
   int next_tag = next->get_tag();
-  while (next_tag != TOK_RBRACE) {
+  while (next_tag != TOK_RBRACE) { // while another statement exists
     statement_list->append_kid(parse_Stmt());
     next = m_lexer->peek();
     if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input after statement");
-
     next_tag = next->get_tag();
   }
   return statement_list.release();
@@ -211,10 +211,9 @@ Node *Parser2::parse_func() {
   // function ident
   std::unique_ptr<Node> function_def(new Node(AST_FUNC));
   expect_and_discard(TOK_FUNC);
-
   Node *ident(expect(TOK_IDENTIFIER));
-  ident->set_tag(AST_VARREF);
   function_def->append_kid(ident);
+  ident->set_tag(AST_VARREF);
 
   // ( OptPList )
   expect_and_discard(TOK_LPAREN);
@@ -241,13 +240,13 @@ Node *Parser2::parse_PList() {
   int next_tag = next->get_tag();
   if (next_tag != TOK_IDENTIFIER) SyntaxError::raise(m_lexer->get_current_loc(), "Expected identifier");
   Node *ident(expect(TOK_IDENTIFIER));
-  ident->set_tag(AST_VARREF);
   param_list->append_kid(ident);
+  ident->set_tag(AST_VARREF);
 
   next = m_lexer->peek();
   if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input parsing parameters");
   next_tag = next->get_tag();
-  while (next_tag == TOK_COMMA) {
+  while (next_tag == TOK_COMMA) { // while another param exists
     expect_and_discard(TOK_COMMA);
     Node *ident(expect(TOK_IDENTIFIER));
     param_list->append_kid(ident);
@@ -274,15 +273,17 @@ Node *Parser2::parse_ArgList() {
   // ArgList →    L                                -- nonempty arg list
   // ArgList →    L , ArgList
 
+  // L
   std::unique_ptr<Node> arg_list(new Node(AST_ARGS));
   Node *next = m_lexer->peek();
   if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input looking for argument");
   arg_list->append_kid(parse_L());
 
+  // , ArgList
   next = m_lexer->peek();
   if (!next) SyntaxError::raise(m_lexer->get_current_loc(), "Unexpected end of input after argument");
   int next_tag = next->get_tag();
-  while (next_tag == TOK_COMMA) {
+  while (next_tag == TOK_COMMA) { // while another argument exists
     expect_and_discard(TOK_COMMA);
     arg_list->append_kid(parse_L());
 
@@ -482,7 +483,7 @@ Node *Parser2::parse_TPrime(Node *ast_) {
 Node *Parser2::parse_F() {
   // F -> ^ number
   // F -> ^ ident
-  // F -> ^ ( E )
+  // F -> ^ ( A )
   // F →          ident ( OptArgList )             -- function call
 
   Node *next = m_lexer->peek();
@@ -491,7 +492,7 @@ Node *Parser2::parse_F() {
   
   int next_tag = next->get_tag();
   int next_next_tag = next_next->get_tag();
-  if (next_tag == TOK_IDENTIFIER && next_next_tag == TOK_LPAREN) {
+  if (next_tag == TOK_IDENTIFIER && next_next_tag == TOK_LPAREN) { // ident ( OptArgList )  
     std::unique_ptr<Node> func_call(new Node(AST_FUNC_CALL));
     Node *ident(expect(TOK_IDENTIFIER));
     func_call->append_kid(ident);
@@ -499,7 +500,6 @@ Node *Parser2::parse_F() {
     expect_and_discard(TOK_LPAREN);
     Node *arg_list(parse_OptArgList());
     expect_and_discard(TOK_RPAREN);
-
     if (arg_list) func_call->append_kid(arg_list);
     return func_call.release();
   } else if (next_tag == TOK_INTEGER_LITERAL || next_tag == TOK_IDENTIFIER) {

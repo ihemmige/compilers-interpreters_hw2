@@ -19,36 +19,59 @@ Interpreter::~Interpreter() {
 
 // recursively ensures any varrefs are preceded by a vardef
 void Interpreter::check_vars(std::unordered_set<std::string>& var_set, Node* parent) {
+  if (parent->get_tag() == AST_VARDEF) { // new variable definition
+    var_set.insert(parent->get_kid(0)->get_str());
+  } else if (parent->get_tag() == AST_VARREF && var_set.find(parent->get_str()) == var_set.end()){ // undefined variable
+      SemanticError::raise(parent->get_loc(), "Undefined variable %s", parent->get_str().c_str());
+  }
   for (auto it = parent->cbegin(); it != parent->cend(); ++it) {
     Node* child = *it;
-    // if a var reference, and the var is not found
-    if (child->get_tag() == AST_VARREF && var_set.find(child->get_str()) == var_set.end()) {
-        SemanticError::raise(child->get_loc(), "Undefined variable %s", child->get_str().c_str());
+    if (child->get_tag() == AST_STMTS) {
+      std::unordered_set<std::string> scoped_var_set(var_set);
+      check_vars(scoped_var_set, child);
+    } else {
+      check_vars(var_set, child);
     }
-    check_vars(var_set, child);
   } 
 }
 
 void Interpreter::analyze() {
-  std::unordered_set<std::string> var_set; // defined variables set
-  for (auto it = m_ast->cbegin(); it != m_ast->cend(); ++it) {
-    Node* child_node = *it;
-    if (child_node->get_kid(0)->get_tag() == AST_VARDEF) { // if vardef, save the name
-      var_set.insert(child_node->get_kid(0)->get_kid(0)->get_str());
-    } else { // recursively check for varrefs 
-      check_vars(var_set, child_node);
-    }
-  }
+  std::unordered_set<std::string> var_set = {"print", "println", "readint"}; // defined variables set
+  check_vars(var_set, m_ast);
 }
 
 Value Interpreter::execute() {
-  Value result;
   std::unique_ptr<Environment> env(new Environment());
+  // bind intrinsic functions
+  env->bind_func("print", Value(&intrinsic_print));
+  env->bind_func("println", Value(&intrinsic_println));
+  env->bind_func("readint", Value(&intrinsic_readint));
+
+  Value result;
   // execute each statement node in the tree
   for (auto it = m_ast->cbegin(); it != m_ast->cend(); ++it) {
     result = execute_node(*env, *it);
   }
   return result;
+}
+
+Value Interpreter::intrinsic_print(Value args[], unsigned num_args, const Location &loc, Interpreter *interp) {
+  if (num_args != 1) EvaluationError::raise(loc, "Intrinsic print function expected 1 argument");
+  std::cout << args[0].as_str();
+  return Value(0);
+}
+
+Value Interpreter::intrinsic_println(Value args[], unsigned num_args,  const Location &loc, Interpreter *interp){
+  if (num_args != 1) EvaluationError::raise(loc, "Intrinsic println expected 1 argument");
+  std::cout << args[0].as_str() << std::endl;
+  return Value(0);
+}
+
+Value Interpreter::intrinsic_readint(Value args[], unsigned num_args, const Location &loc, Interpreter *interp){
+  if (num_args != 0) EvaluationError::raise(loc, "Intrinsic readint function expected 0 arguments");
+  int i;
+  std::cin >> i;
+  return Value(i);
 }
 
 // recursively execute node based on its type, returning Value object to represent results
@@ -121,12 +144,11 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
       return Value(0);
     }
     case AST_STMTS: {
-      Environment* new_env = new Environment(&env);
+      Environment* new_env = new Environment(&env); // block scope
       Value res;
       for (auto it = node->cbegin(); it != node->cend(); ++it) {
         Node* child_node = *it;
         res = execute_node(*new_env, child_node);
-        
       }
       delete new_env;
       return res;
@@ -136,13 +158,12 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
     case AST_FUNC_CALL: {
       std::string func_name = node->get_kid(0)->get_str();
       if (node->get_num_kids() > 1) { // func has args
-      int arg_ct = node->get_kid(1)->get_num_kids();
+        int arg_ct = node->get_kid(1)->get_num_kids();
         Value args[arg_ct];
         for (int i = 0; i < arg_ct; i++) {
           args[i] = execute_node(env, node->get_kid(1)->get_kid(i));
         }
-        const Location &location = node->get_loc();
-        return env.function_call(func_name, args, arg_ct, location, *this);
+        return env.function_call(func_name, args, arg_ct, node->get_loc(), *this);
       }
     }
     default:

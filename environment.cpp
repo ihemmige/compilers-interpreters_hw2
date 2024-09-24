@@ -29,7 +29,7 @@ Value Environment::create_var(std::string var) {
   return m_lookup_table[var];
 }
 
-Value Environment::bind(std::string func_name, Value func) {
+Value Environment::bind_func(std::string func_name, Value func) {
   if (func.get_kind() != VALUE_INTRINSIC_FN && func.get_kind() != VALUE_FUNCTION) {
     RuntimeError::raise("Tried to bind an object that isn't a function.");
   }
@@ -37,16 +37,14 @@ Value Environment::bind(std::string func_name, Value func) {
   return m_lookup_table[func_name];
 }
 
-Value Environment::function_call(std::string func_name, Value args[], int num_args, const Location &location, Interpreter& interpreter) {
-  if (m_lookup_table.find(func_name) == m_lookup_table.end()) return m_parent->function_call(func_name, args, num_args, location, interpreter);
+Value Environment::function_call(std::string func_name, Value args[], int arg_ct, const Location &location, Interpreter& interpreter) {
+  // if function is in a parent scope
+  if (m_lookup_table.find(func_name) == m_lookup_table.end()) return m_parent->function_call(func_name, args, arg_ct, location, interpreter);
 
   Value function = m_lookup_table[func_name];
-
-  if (function.get_kind() != VALUE_INTRINSIC_FN && function.get_kind() != VALUE_FUNCTION) RuntimeError::raise("Tried to bind an object that isn't a function.");
-  
-  if (function.get_kind() == VALUE_INTRINSIC_FN) {
+  if (function.get_kind() == VALUE_INTRINSIC_FN) { // intrinsic function handling
     IntrinsicFn intrin_func = function.get_intrinsic_fn();
-    return Value(intrin_func(args, num_args, location,  &interpreter));
+    return Value(intrin_func(args, arg_ct, location,  &interpreter));
   }
   return Value(0);
 }
