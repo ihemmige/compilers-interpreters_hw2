@@ -1,6 +1,5 @@
 #include "environment.h"
 
-
 Environment::Environment(Environment *parent)
   : m_parent(parent) {
   assert(m_parent != this);
@@ -37,14 +36,12 @@ Value Environment::bind_func(std::string func_name, Value func) {
   return m_lookup_table[func_name];
 }
 
-Value Environment::function_call(std::string func_name, Value args[], int arg_ct, const Location &location, Interpreter& interpreter) {
+Value Environment::retrieve_func(std::string func_name) {
   // if function is in a parent scope
-  if (m_lookup_table.find(func_name) == m_lookup_table.end()) return m_parent->function_call(func_name, args, arg_ct, location, interpreter);
-
+  if (m_lookup_table.find(func_name) == m_lookup_table.end()) return m_parent->retrieve_func(func_name);
   Value function = m_lookup_table[func_name];
-  if (function.get_kind() == VALUE_INTRINSIC_FN) { // intrinsic function handling
-    IntrinsicFn intrin_func = function.get_intrinsic_fn();
-    return Value(intrin_func(args, arg_ct, location,  &interpreter));
+  if (function.get_kind() != VALUE_INTRINSIC_FN && function.get_kind() != VALUE_FUNCTION) {
+    RuntimeError::raise("%s not function", func_name.c_str());
   }
-  return Value(0);
+  return function; // valid function
 }

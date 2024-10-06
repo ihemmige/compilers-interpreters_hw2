@@ -23,7 +23,15 @@ void Interpreter::check_vars(std::unordered_set<std::string>& var_set, Node* par
     var_set.insert(parent->get_kid(0)->get_str());
   } else if (parent->get_tag() == AST_VARREF && var_set.find(parent->get_str()) == var_set.end()){ // undefined variable
       SemanticError::raise(parent->get_loc(), "Undefined variable %s", parent->get_str().c_str());
+  } else if (parent->get_tag() == AST_FUNC) {
+    var_set.insert(parent->get_kid(0)->get_str());
+    // number of args, if there are args
+    int arg_ct = parent->get_num_kids() == 3 ? parent->get_kid(1)->get_num_kids() : 0;
+    for (int i = 0; i < arg_ct; i++) {
+      var_set.insert(parent->get_kid(1)->get_kid(i)->get_str());
+    }
   }
+
   for (auto it = parent->cbegin(); it != parent->cend(); ++it) {
     Node* child = *it;
     if (child->get_tag() == AST_STMTS) {
@@ -196,18 +204,49 @@ Value Interpreter::execute_node(Environment& env, Node* node) {
       delete new_env;
       return res;
     }
-    case AST_FUNC:
-      return Value(0);
-    case AST_FUNC_CALL: {
+    case AST_FUNC: {
       std::string func_name = node->get_kid(0)->get_str();
-      if (node->get_num_kids() > 1) { // func has args
-        int arg_ct = node->get_kid(1)->get_num_kids();
-        Value args[arg_ct];
-        for (int i = 0; i < arg_ct; i++) {
-          args[i] = execute_node(env, node->get_kid(1)->get_kid(i));
+      std::vector<std::string> params;
+      if (node->get_num_kids() == 3) { // if function has params
+        Node* params_node = node->get_kid(1);
+        for (auto it = params_node->cbegin(); it != params_node->cend(); ++it) {
+          params.push_back((*it)->get_str());
         }
-        return env.function_call(func_name, args, arg_ct, node->get_loc(), *this);
       }
+      Node* func_body = node->get_kid(node->get_num_kids() - 1);
+      Value func = new Function(func_name, params, &env, func_body);
+      env.bind_func(func_name, func);
+      return Value(0);
+    }
+    case AST_FUNC_CALL: {
+      Value func_val = env.retrieve_func(node->get_kid(0)->get_str());
+      Environment* new_env = new Environment(&env);
+      Value result;
+      // number of args, if there are args
+      int arg_ct = node->get_num_kids() > 1 ? node->get_kid(1)->get_num_kids() : 0;
+      Value args[arg_ct];
+      for (int i = 0; i < arg_ct; i++) {
+        args[i] = execute_node(*new_env, node->get_kid(1)->get_kid(i));
+      }
+      if (func_val.get_kind() == VALUE_INTRINSIC_FN) {
+        IntrinsicFn intrin_func = func_val.get_intrinsic_fn();
+        result = intrin_func(args, arg_ct, node->get_loc(), this);
+      } else {
+        Node* start = func_val.get_function()->get_body();
+        std::vector<std::string> params = func_val.get_function()->get_params();
+        if (static_cast<int>(params.size()) != arg_ct) {
+          EvaluationError::raise(node->get_loc(), "Incorect number of function arguments.");
+        }
+        Environment* block_env = new Environment(func_val.get_function()->get_parent_env());
+        for (int i = 0; i < arg_ct; i++) {
+          block_env->create_var(params[i]);
+          block_env->set_var(params[i], args[i].get_ival());
+        }
+        result = execute_node(*block_env, start);
+        delete block_env;
+      }
+      delete new_env;
+      return result;
     }
     default:
       EvaluationError::raise(node->get_loc(),"Unrecognized node type");

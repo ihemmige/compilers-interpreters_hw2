@@ -26,7 +26,7 @@ public:
   Value set_var(std::string var, int value);
   Value create_var(std::string var);
   Value bind_func(std::string func_name, Value func);
-  Value function_call(std::string func_name, Value args[], int arg_ct, const Location &location, Interpreter& interpreter);
+  Value retrieve_func(std::string func_name);
 };
 
 #endif // ENVIRONMENT_H
